@@ -3,14 +3,17 @@
 #include <sstream>
 #include <vector>
 
+#include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <unistd.h>
 
 using namespace std;
 
 vector<string> get_tokens(string);
-void execute(vector<string> args);
+void execute(vector<string>);
+char** getArrOfCharArrs(vector<string>);
 
 int main(){
     bool should_continue = true;
@@ -23,7 +26,7 @@ int main(){
 
         args = get_tokens(line);
 
-        if(args.size() >= 1 && args[0] == "exit"){
+        if(args.size() >= 1 && (args[0] == "exit" || args[0] == "quit") ){
             should_continue = false;
         }else{
             execute(args);
@@ -50,14 +53,24 @@ void execute(vector<string> args){
 
     if( pid == 0 ){
         //child
-        int *array = new int[args.size()];
-        copy(args.begin(),args.end(),array);
+        char** array = getArrOfCharArrs(args);
 
-        exec("/usr/bin/" + args[0], array);
+        execvp(array[0],array);
     }else{
         //parent
         if( !(args[args.size()-1] == "&") ){
             wait(NULL);
         }
     }
+}
+
+char** getArrOfCharArrs(vector<string> args){
+    char** arry = new char*[args.size()];
+
+    for(int i = 0; i < args.size(); i++){
+        arry[i] = new char[args[i].length()+1];
+        strcpy(arry[i],args[i].c_str());
+    }
+
+    return arry;
 }
