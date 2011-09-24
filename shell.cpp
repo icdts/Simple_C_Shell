@@ -8,13 +8,13 @@
 #include <sys/wait.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 using namespace std;
 
 vector<string> get_tokens(string);
 void execute(vector<string>);
 char** getArrOfCharArrs(vector<string>);
-void handleErrors();
 
 int main(){
     bool should_continue = true;
@@ -34,6 +34,8 @@ int main(){
                 execute(args);
             }
         }
+
+        args.clear();
     }
 }
 
@@ -67,7 +69,8 @@ void execute(vector<string> args){
         char** array = getArrOfCharArrs(args);
 
         execvp(array[0],array);
-        handleErrors();
+        perror("error: ");
+        _exit(-1);
     }else{
         //parent
         if( !background ){
@@ -76,8 +79,9 @@ void execute(vector<string> args){
     }
 }
 
+// Just changes a vector of strings into a char**
 char** getArrOfCharArrs(vector<string> args){
-    char** arry = new char*[args.size()];
+    char** arry = new char*[args.size()+1];
 
     for(int i = 0; i < args.size(); i++){
         arry[i] = new char[args[i].length()+1];
@@ -85,9 +89,4 @@ char** getArrOfCharArrs(vector<string> args){
     }
 
     return arry;
-}
-
-void handleErrors(){
-    cout << "WAT";
-    _exit(-1);
 }
