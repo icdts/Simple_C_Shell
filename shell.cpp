@@ -14,7 +14,6 @@ using namespace std;
 
 vector<string> get_tokens(string);
 void execute(vector<string>);
-char** getArrOfCharArrs(vector<string>);
 
 int main(){
     bool should_continue = true;
@@ -66,9 +65,13 @@ void execute(vector<string> args){
 
     if( pid == 0 ){
         //child
-        char** array = getArrOfCharArrs(args);
+        vector<char *> c_style;
+        for(int i = 0; i < args.size(); i++){
+           c_style.push_back(const_cast<char *>(args[i].c_str()));
+        }
+        c_style.push_back(NULL);
 
-        execvp(array[0],array);
+        execvp(c_style[0],&c_style[0]);
         perror("error: ");
         _exit(-1);
     }else{
@@ -77,16 +80,4 @@ void execute(vector<string> args){
             wait(NULL);
         }
     }
-}
-
-// Just changes a vector of strings into a char**
-char** getArrOfCharArrs(vector<string> args){
-    char** arry = new char*[args.size()+1];
-
-    for(int i = 0; i < args.size(); i++){
-        arry[i] = new char[args[i].length()+1];
-        strcpy(arry[i],args[i].c_str());
-    }
-
-    return arry;
 }
