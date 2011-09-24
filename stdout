@@ -1,9 +1,0 @@
-total 52
-drwxr-xr-x 3 robb robb  4096 Sep 23 20:38 .
-drwxr-xr-x 4 robb robb  4096 Sep 23 19:28 ..
--rwxr-xr-x 1 robb robb 32542 Sep 23 20:25 a.out
--rw-r--r-- 1 robb robb     0 Sep 22 20:37 example.cpp
-drwxr-xr-x 8 robb robb  4096 Sep 23 20:37 .git
--rw-r--r-- 1 robb robb   200 Sep 23 19:36 README
--rw-r--r-- 1 robb robb  1599 Sep 23 20:29 shell.cpp
--rw-r--r-- 1 robb robb     0 Sep 23 20:38 stdout
