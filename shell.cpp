@@ -14,6 +14,7 @@ using namespace std;
 vector<string> get_tokens(string);
 void execute(vector<string>);
 char** getArrOfCharArrs(vector<string>);
+void handleErrors();
 
 int main(){
     bool should_continue = true;
@@ -26,10 +27,12 @@ int main(){
 
         args = get_tokens(line);
 
-        if(args.size() >= 1 && (args[0] == "exit" || args[0] == "quit") ){
-            should_continue = false;
-        }else{
-            execute(args);
+        if( args.size() >= 1 ){
+            if(args[0] == "exit" || args[0] == "quit"){
+                should_continue = false;
+            }else{
+                execute(args);
+            }
         }
     }
 }
@@ -64,8 +67,7 @@ void execute(vector<string> args){
         char** array = getArrOfCharArrs(args);
 
         execvp(array[0],array);
-
-        cout << "NEVER REACH";
+        handleErrors();
     }else{
         //parent
         if( !background ){
@@ -83,4 +85,9 @@ char** getArrOfCharArrs(vector<string> args){
     }
 
     return arry;
+}
+
+void handleErrors(){
+    cout << "WAT";
+    _exit(-1);
 }
