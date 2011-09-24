@@ -50,15 +50,25 @@ vector<string> get_tokens(string data){
 
 void execute(vector<string> args){
     pid_t pid = fork();
+    bool background = false;
+    
+    if(args[args.size()-1] == "&"){
+        background = true;
+
+        args.pop_back();
+    }
+    
 
     if( pid == 0 ){
         //child
         char** array = getArrOfCharArrs(args);
 
         execvp(array[0],array);
+
+        cout << "NEVER REACH";
     }else{
         //parent
-        if( !(args[args.size()-1] == "&") ){
+        if( !background ){
             wait(NULL);
         }
     }
