@@ -25,7 +25,7 @@ int main(){
     vector<string> args;
 
     while(should_continue){
-        cout << "(myshell)>";
+        std::cout << "(myshell)>";
         getline(cin, line);
 
         args = get_tokens(line);
@@ -58,10 +58,18 @@ vector<string> get_tokens(string data){
 
 void execute(vector<string> args){
     vector<pid_t> pid;
+	vector<int> to_close;
     bool background = false;
 	int pipe_loc;
+	int last_pipe_loc = -1;
 	int append;
 	int new_fd[2];
+	int last_fd[2];
+
+	new_fd[0] = -1;
+	new_fd[1] = -1;
+	last_fd[0] = -1;
+	last_fd[1] = -1;
 
     if(args[args.size()-1] == "&"){
         background = true;
@@ -74,28 +82,65 @@ void execute(vector<string> args){
 	if(pipe_loc == -1 && append == -1){
 		pid.push_back( make_child(args,0,args.size()-1,-1,-1,-1,-1) );
 	}else{
-		if(pipe_loc != -1){
-			//handle pipes
+		
+		//handle pipes
+		while( pipe_loc != -1 ){
+			pipe(new_fd);
+		
+			cout << "making child with pipes:" << endl;
+			cout << "	last_fd = [" << last_fd[0] << "," << last_fd[1] << "]" << endl;
+			cout << "	new_fd = [" << new_fd[0] << "," << new_fd[1] << "]" << endl;
+			pid.push_back( make_child(args,last_pipe_loc+1,pipe_loc-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]) );
+			last_pipe_loc = pipe_loc;
+			pipe_loc = find_token(args,last_pipe_loc+1,"|");
 
-			if(append != -1){
-			
-			}
-		}else{
-			//only append
-			//make pipe
+			//parent won't use either end
+			to_close.push_back(new_fd[0]);
+			to_close.push_back(new_fd[1]);
+
+			//new is no longer new, it has something attached to it
+			last_fd[0] = new_fd[0];
+			last_fd[1] = new_fd[1];
+			new_fd[0] = -1;
+			new_fd[1] = -1;
+		}
+
+		if(append != -1){
 			pipe(new_fd);
 
-			pid.push_back(make_child(args,0,append-1,-1,-1,new_fd[0],new_fd[1]));
+			pid.push_back(make_child(args,last_pipe_loc+1,append-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]));
 			pid.push_back(output(args,append+1,-1,-1,new_fd[0],new_fd[1]));
 
-			close(new_fd[0]);
-			close(new_fd[1]);
+			//parent won't use either end
+			to_close.push_back(new_fd[0]);
+			to_close.push_back(new_fd[1]);
+			
+			//new is no longer new, it has something attached to it
+			last_fd[0] = new_fd[0];
+			last_fd[1] = new_fd[1];
+			new_fd[0] = -1;
+			new_fd[1] = -1;
+		}else{
+			cout << "making child with pipes:" << endl;
+			cout << "	last_fd = [" << last_fd[0] << "," << last_fd[1] << "]" << endl;
+			cout << "	new_fd = [" << new_fd[0] << "," << new_fd[1] << "]" << endl;
+			pid.push_back(make_child(args,last_pipe_loc+1,args.size()-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]));
+			last_fd[0] = new_fd[0];
+			last_fd[1] = new_fd[1];
+			new_fd[0] = -1;
+			new_fd[1] = -1;
 		}
 	}
-	
+
+	for(int i=0; i<to_close.size(); i++){
+		close(to_close[i]);
+	}
+
 	//wait on children
 	if( !background ){
-		wait(NULL);
+		for(int i=0; i<pid.size(); i++){
+			waitpid(pid[i],NULL,0);
+		}
 	}
 }
 
@@ -103,19 +148,19 @@ pid_t make_child(vector<string> &args, int start, int end, int read, int close1,
 	pid_t pid = fork();
 	if( pid == 0 ){
 		if( close1 != -1 ){
-			close(close1);
+			//close(close1);
 		}
 
 		if( close2 != -2 ){
-			close(close2);
+			//close(close2);
 		}
 
 		if(read != -1){
-			dup2(read,0);
+			dup2(read,STDIN_FILENO);
 		}
 		
 		if(write != -1){
-			dup2(write,0);
+			dup2(write,STDOUT_FILENO);
 		}
 
         vector<char *> c_style;
@@ -140,7 +185,7 @@ pid_t output(vector<string> &args, int filename_loc, int start, int end, int rea
 
 		fd=open(args[filename_loc].c_str(),O_RDWR|O_CREAT,0600);
 
-		dup2(read_end,1); 
+		dup2(read_end,STDIN_FILENO); 
 		close(close_end);
 
 		while ((count=read(0,&c,1))>0) 
