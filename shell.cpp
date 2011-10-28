@@ -16,6 +16,7 @@ using namespace std;
 vector<string> get_tokens(string);
 void execute(vector<string>);
 pid_t make_child(vector<string>&,int,int,int,int,int,int);
+pid_t output(vector<string>&,int,int,int,int,int);
 int find_token(vector<string>&,int,string);
 
 int main(){
@@ -127,6 +128,27 @@ pid_t make_child(vector<string> &args, int start, int end, int read, int close1,
         perror("error: ");
         _exit(-1);
     }
+	return pid;
+}
+
+pid_t output(vector<string> &args, int filename_loc, int start, int end, int read_end, int close_end){
+	pid_t pid = fork();
+	if( pid == 0 ){
+		int fd;
+		int count;
+		char c;
+
+		fd=open(args[filename_loc].c_str(),O_RDWR|O_CREAT,0600);
+
+		dup2(read_end,1); 
+		close(close_end);
+
+		while ((count=read(0,&c,1))>0) 
+			write(fd,&c,1);
+		close(fd);
+
+		_exit(1);
+	}
 	return pid;
 }
 
