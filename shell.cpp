@@ -11,30 +11,36 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#define READ 0
+#define WRITE 1
+
 using namespace std;
 
 vector<string> get_tokens(string);
 void execute(vector<string>);
-pid_t make_child(vector<string>&,int,int,int,int,int,int);
-pid_t output(vector<string>&,int,int,int,int,int);
-int find_token(vector<string>&,int,string);
+void handle_pipes(vector<string> cmd1, vector<string> cmd2);
+void execute_cmd(vector<string> &args);
+vector<string> sub_vec(vector<string> &vec, int start, int end);
+void output(string filename);
+int find_token(vector<string>&,string);
+void handle_append(vector<string> args);
 
 int main(){
     bool should_continue = true;
     string line;
     vector<string> args;
+	vector<string> empty; //:D
 
     while(should_continue){
-        std::cout << "(myshell)>";
+        cout << "(myshell)>";
         getline(cin, line);
 
         args = get_tokens(line);
-
         if( args.size() >= 1 ){
             if(args[0] == "exit" || args[0] == "quit"){
                 should_continue = false;
             }else{
-                execute(args);
+            	execute(args);
             }
         }
 
@@ -57,151 +63,136 @@ vector<string> get_tokens(string data){
 }
 
 void execute(vector<string> args){
-    vector<pid_t> pid;
-	vector<int> to_close;
-    bool background = false;
-	int pipe_loc;
-	int last_pipe_loc = -1;
-	int append;
-	int new_fd[2];
-	int last_fd[2];
+	int pipe_loc = find_token(args,"|");
 
-	new_fd[0] = -1;
-	new_fd[1] = -1;
-	last_fd[0] = -1;
-	last_fd[1] = -1;
-
-    if(args[args.size()-1] == "&"){
-        background = true;
-        args.pop_back();
-    }
-    
-	pipe_loc = find_token(args,0,"|");
-	append = find_token(args,0,">>");
-
-	if(pipe_loc == -1 && append == -1){
-		pid.push_back( make_child(args,0,args.size()-1,-1,-1,-1,-1) );
+	if(pipe_loc == -1){
+		pid_t child = fork();
+		if( child == 0 ){
+			handle_append(args);
+		}
+		waitpid(child,NULL,0);
 	}else{
-		
-		//handle pipes
-		while( pipe_loc != -1 ){
-			pipe(new_fd);
-		
-			cout << "making child with pipes:" << endl;
-			cout << "	last_fd = [" << last_fd[0] << "," << last_fd[1] << "]" << endl;
-			cout << "	new_fd = [" << new_fd[0] << "," << new_fd[1] << "]" << endl;
-			pid.push_back( make_child(args,last_pipe_loc+1,pipe_loc-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]) );
-			last_pipe_loc = pipe_loc;
-			pipe_loc = find_token(args,last_pipe_loc+1,"|");
+		handle_pipes(
+			sub_vec(args,0,pipe_loc-1),
+			sub_vec(args,pipe_loc+1,args.size()-1)
+		);
+	}
+}
+void handle_pipes(vector<string> cmd1, vector<string> cmd2){
+	int fd[2];
+	pipe(fd);
+	pid_t child = fork();
+	pid_t child2;
 
-			//parent won't use either end
-			to_close.push_back(new_fd[0]);
-			to_close.push_back(new_fd[1]);
+	if( child == 0 ){
+		dup2(fd[WRITE], STDOUT_FILENO);
+		close(fd[READ]);
+		execute_cmd(cmd1);
+	}else{
+		child2 = fork();
+		if( child2 == 0 ){
+			dup2(fd[READ], STDIN_FILENO);
+			close(fd[WRITE]);
 
-			//new is no longer new, it has something attached to it
-			last_fd[0] = new_fd[0];
-			last_fd[1] = new_fd[1];
-			new_fd[0] = -1;
-			new_fd[1] = -1;
+			int next_pipe = find_token(cmd2,"|");
+			if( -1 != next_pipe ){
+				handle_pipes(
+					sub_vec(cmd2,0,next_pipe-1),
+					sub_vec(cmd2,next_pipe+1,cmd2.size()-1)
+				);
+				_exit(0);
+			}else{
+				handle_append(cmd2);
+			}
 		}
+		wait(NULL);
+	}
+	close(fd[READ]);
+	close(fd[WRITE]);
+	wait(NULL);
+}
 
-		if(append != -1){
-			pipe(new_fd);
+void execute_cmd(vector<string> &args){
+	if( args.size() > 0 ){
+		int append_pos = find_token(args,">>");
 
-			pid.push_back(make_child(args,last_pipe_loc+1,append-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]));
-			pid.push_back(output(args,append+1,-1,-1,new_fd[0],new_fd[1]));
+		vector<char *> c_style;
+		for(int i = 0; i < args.size(); i++){
+		   c_style.push_back(const_cast<char *>(args[i].c_str()));
+		}
+		c_style.push_back(NULL);
 
-			//parent won't use either end
-			to_close.push_back(new_fd[0]);
-			to_close.push_back(new_fd[1]);
-			
-			//new is no longer new, it has something attached to it
-			last_fd[0] = new_fd[0];
-			last_fd[1] = new_fd[1];
-			new_fd[0] = -1;
-			new_fd[1] = -1;
+		execvp(c_style[0],&c_style[0]);
+		perror("error: ");
+		_exit(-1);
+	}
+	_exit(0);
+}
+
+void handle_append(vector<string> args){
+	int append_pos = find_token(args,">>");
+
+	if( append_pos == -1 ){
+		execute_cmd(args);
+	}else{
+		vector<string> cmd1;
+		vector<string> cmd2;
+
+		cmd1 = sub_vec(args,0,append_pos-1);
+		cmd2 = sub_vec(args,append_pos+1,args.size()-1);
+
+		int fd[2];
+		pipe(fd);
+		pid_t child = fork();
+		pid_t child2;
+
+		if( child == 0 ){
+			dup2(fd[WRITE], STDOUT_FILENO);
+			close(fd[READ]);
+			execute_cmd(cmd1);
 		}else{
-			cout << "making child with pipes:" << endl;
-			cout << "	last_fd = [" << last_fd[0] << "," << last_fd[1] << "]" << endl;
-			cout << "	new_fd = [" << new_fd[0] << "," << new_fd[1] << "]" << endl;
-			pid.push_back(make_child(args,last_pipe_loc+1,args.size()-1,last_fd[0],last_fd[1],new_fd[0],new_fd[1]));
-			last_fd[0] = new_fd[0];
-			last_fd[1] = new_fd[1];
-			new_fd[0] = -1;
-			new_fd[1] = -1;
-		}
-	}
+			child2 = fork();
+			if( child2 == 0 ){
+				dup2(fd[READ], STDIN_FILENO);
+				close(fd[WRITE]);
 
-	for(int i=0; i<to_close.size(); i++){
-		close(to_close[i]);
-	}
-
-	//wait on children
-	if( !background ){
-		for(int i=0; i<pid.size(); i++){
-			waitpid(pid[i],NULL,0);
+				output(cmd2[0]);	
+			}
+			wait(NULL);
 		}
-	}
+		close(fd[READ]);
+		close(fd[WRITE]);
+		wait(NULL);
+	}	
+}
+void output(string filename){
+	int fd;
+	int count;
+	char c;
+
+	fd=open(filename.c_str(),O_RDWR|O_CREAT,0600);
+
+	while ((count=read(0,&c,1))>0) 
+		write(fd,&c,1);
+	close(fd);
+
+	_exit(1);
 }
 
-pid_t make_child(vector<string> &args, int start, int end, int read, int close1, int close2, int write){
-	pid_t pid = fork();
-	if( pid == 0 ){
-		if( close1 != -1 ){
-			//close(close1);
-		}
-
-		if( close2 != -2 ){
-			//close(close2);
-		}
-
-		if(read != -1){
-			dup2(read,STDIN_FILENO);
-		}
-		
-		if(write != -1){
-			dup2(write,STDOUT_FILENO);
-		}
-
-        vector<char *> c_style;
-        for(int i = start; i <= end; i++){
-           c_style.push_back(const_cast<char *>(args[i].c_str()));
-        }
-        c_style.push_back(NULL);
-
-        execvp(c_style[0],&c_style[0]);
-        perror("error: ");
-        _exit(-1);
-    }
-	return pid;
-}
-
-pid_t output(vector<string> &args, int filename_loc, int start, int end, int read_end, int close_end){
-	pid_t pid = fork();
-	if( pid == 0 ){
-		int fd;
-		int count;
-		char c;
-
-		fd=open(args[filename_loc].c_str(),O_RDWR|O_CREAT,0600);
-
-		dup2(read_end,STDIN_FILENO); 
-		close(close_end);
-
-		while ((count=read(0,&c,1))>0) 
-			write(fd,&c,1);
-		close(fd);
-
-		_exit(1);
-	}
-	return pid;
-}
-
-int find_token(vector<string> &vec, int start, string token){
-	for(int i = start; i < vec.size(); i++){
+int find_token(vector<string> &vec, string token){
+	for(int i = 0; i < vec.size(); i++){
 		if(vec[i] == token){
 			return i;
 		}
 	}
 	return -1;
+}
+
+vector<string> sub_vec(vector<string> &vec, int start, int end){
+	vector<string> new_vec;
+
+	for(int i = start; i <= end; i++){
+		new_vec.push_back(vec[i]);
+	}
+	return new_vec;
 }
