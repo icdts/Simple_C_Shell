@@ -1,6 +1,7 @@
 Simplist C++ shell program.  Use of system() is banned.
 
 Should support:
-    & at end to background tasks
+	Pipes "|"
+	Append ">>"
     Exiting program at 'exit' or 'quit' command.
     Meaninful error messages at wrong input.
